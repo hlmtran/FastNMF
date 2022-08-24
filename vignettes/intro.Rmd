@@ -1,0 +1,54 @@
+---
+title: "intro"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{intro}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This vignette demonstrates how to use this package to benchmark NMF runtimes.
+
+```{r setup}
+library(FastNMF)
+```
+
+We will use `microbenchmark` for benchmarking, `RcppML` for an example dataset, and compare runtime of the `FastNMF::FastNMF` function vs. the RcppML `nmf` function.
+
+You will need to use `install.packages(RcppML)`, for example, to install these libraries on your system:
+
+```{R}
+library(RcppML)
+library(microbenchmark)
+library(ggplot2)
+data(hawaiibirds) # provided in the RcppML package
+```
+
+Load the example `hawaiibirds` dataset and learn an NMF model at a rank of 10:
+
+```{R}
+set.seed(123)
+nmf_model <- FastNMF(hawaiibirds$counts, k = 10)
+mb <- microbenchmark(
+  FastNMF(hawaiibirds$counts, k = 10), 
+  RcppML::nmf(hawaiibirds$counts, k = 10), 
+  times = 10)
+mb
+```
+
+And plot the benchmarking results:
+
+```{R, fig.width = 6, fig.height = 3}
+autoplot(mb)
+```
+
+Note that runtime is incredibly dependent on dataset size, shape, sparsity, and factor rank.  Benchmarking should demonstrate clear differences in runtime across a wide range of dataset characteristics.
+
+Also be aware of local compiler optimizations and local Makevars files vs. optimizations used by central repositories or `devtools::install_github("FastNMF")`.
