@@ -1,0 +1,25 @@
+Package: FastNMF
+Type: Package
+Title: Barebones proof-of-concept NMF
+Version: 0.0.99
+Date: 2022-08-24
+Authors@R: person("Zach", "DeBruine", 
+    email = "zacharydebruine@gmail.com", 
+    role = c("aut", "cre"), 
+    comment = c(ORCID = "0000-0003-2234-4827"))
+Description: For developing GPU-accelerated NNLS and graph regularization.
+License: GPL (>= 2)
+Imports: 
+    Matrix, 
+    RcppML, 
+    ggplot2, 
+    microbenchmark, 
+    methods, 
+    stats
+LinkingTo: Rcpp, RcppEigen
+RoxygenNote: 7.2.1
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Encoding: UTF-8
