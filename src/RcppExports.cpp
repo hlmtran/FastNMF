@@ -12,26 +12,25 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // c_nmf
-Rcpp::List c_nmf(const Rcpp::S4& A_, const Rcpp::S4& At_, const double tol, const uint16_t maxit, const bool verbose, const double L1, const int threads, Eigen::MatrixXd w);
-RcppExport SEXP _FastNMF_c_nmf(SEXP A_SEXP, SEXP At_SEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP verboseSEXP, SEXP L1SEXP, SEXP threadsSEXP, SEXP wSEXP) {
+Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const uint16_t maxit, const bool verbose, const double L1, const int threads, Eigen::MatrixXd w);
+RcppExport SEXP _FastNMF_c_nmf(SEXP ASEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP verboseSEXP, SEXP L1SEXP, SEXP threadsSEXP, SEXP wSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const Rcpp::S4& >::type A_(A_SEXP);
-    Rcpp::traits::input_parameter< const Rcpp::S4& >::type At_(At_SEXP);
+    Rcpp::traits::input_parameter< const Eigen::SparseMatrix<double> >::type A(ASEXP);
     Rcpp::traits::input_parameter< const double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< const uint16_t >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< const bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const double >::type L1(L1SEXP);
     Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
     Rcpp::traits::input_parameter< Eigen::MatrixXd >::type w(wSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_nmf(A_, At_, tol, maxit, verbose, L1, threads, w));
+    rcpp_result_gen = Rcpp::wrap(c_nmf(A, tol, maxit, verbose, L1, threads, w));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_FastNMF_c_nmf", (DL_FUNC) &_FastNMF_c_nmf, 8},
+    {"_FastNMF_c_nmf", (DL_FUNC) &_FastNMF_c_nmf, 7},
     {NULL, NULL, 0}
 };
 

@@ -25,5 +25,5 @@
 FastNMF <- function(A, k, tol = 1e-4, maxit = 100, verbose = FALSE, L1 = 0, threads = 0){
   w <- matrix(runif(nrow(A) * k), k, nrow(A))   # randomly initialize 'w'
   A <- as(A, "dgCMatrix") # coerce to sparse, if not already
-  return(c_nmf(A, t(A), tol, maxit, verbose, L1, threads, w))
+  return(c_nmf(A, tol, maxit, verbose, L1, threads, w))
 }

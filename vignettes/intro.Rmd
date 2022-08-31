@@ -1,5 +1,5 @@
 ---
-title: "intro"
+title: "Benchmarking FastNMF Runtime"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{intro}
@@ -20,16 +20,19 @@ This vignette demonstrates how to use this package to benchmark NMF runtimes.
 library(FastNMF)
 ```
 
-We will use `microbenchmark` for benchmarking, `RcppML` for an example dataset, and compare runtime of the `FastNMF::FastNMF` function vs. the RcppML `nmf` function.
+We can use `microbenchmark` for benchmarking, `RcppML` for an example dataset, and compare runtime of the `FastNMF::FastNMF` function vs. the RcppML `nmf` function.
 
 You will need to use `install.packages(RcppML)`, for example, to install these libraries on your system:
 
 ```{R}
-library(RcppML)
-library(microbenchmark)
-library(ggplot2)
+devtools::install_github("zdebruine/RcppML")
+library(RcppML) # need the dev version (install from GitHub)
+library(microbenchmark) # install.packages("microbenchmark")
+library(ggplot2) # install.packages("ggplot2")
 data(hawaiibirds) # provided in the RcppML package
 ```
+
+## A Simple Test Case 
 
 Load the example `hawaiibirds` dataset and learn an NMF model at a rank of 10:
 
@@ -48,6 +51,32 @@ And plot the benchmarking results:
 ```{R, fig.width = 6, fig.height = 3}
 autoplot(mb)
 ```
+
+## Benchmarking on Random Matrices
+
+Simulate random sparse matrices with different densities and dimensions (having a wide vs. tall matrix can make a difference depending on implementation details).
+
+```{R}
+library(Matrix)
+set.seed(123)
+matrix_1pct_dense <- Matrix::rsparsematrix(1000, 10000, density = 0.01)
+matrix_10pct_dense <- Matrix::rsparsematrix(1000, 10000, density = 0.01)
+matrix_1pct_dense_tall <- Matrix::rsparsematrix(10000, 1000, density = 0.01)
+```
+
+Now we can benchmark runtimes for these matrices using the `FastNMF` function:
+
+```{R}
+mb <- microbenchmark(
+  "1% dense (wide)" = FastNMF(matrix_1pct_dense, k = 10), 
+  "10% dense (wide)" = FastNMF(matrix_10pct_dense, k = 10),
+  "1% dense (tall)" = FastNMF(matrix_1pct_dense_tall, k = 10),
+  times = 100)
+mb
+autoplot(mb)
+```
+
+It is also possible to vary factorization rank to measure differences in runtime, etc.
 
 Note that runtime is incredibly dependent on dataset size, shape, sparsity, and factor rank.  Benchmarking should demonstrate clear differences in runtime across a wide range of dataset characteristics.
 
