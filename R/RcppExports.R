@@ -5,3 +5,7 @@ c_nmf <- function(A, tol, maxit, verbose, L1, threads, w) {
     .Call(`_FastNMF_c_nmf`, A, tol, maxit, verbose, L1, threads, w)
 }
 
+c_nmf2 <- function(A, tol, maxit, verbose, L1, threads, w) {
+    .Call(`_FastNMF_c_nmf2`, A, tol, maxit, verbose, L1, threads, w)
+}
+

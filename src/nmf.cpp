@@ -9,6 +9,65 @@
 #include <omp.h>
 #endif
 
+#include <chrono>
+
+// generate a random uint32 given indices i and j and some state
+inline uint32_t rand_uint32(const uint32_t state, const uint32_t i, const uint32_t j){
+  // generate a unique hash of i and j, using (max(i, j))(max(i, j) + 1) / 2 + min(i, j)
+  // https://math.stackexchange.com/questions/882877/produce-unique-number-given-two-integers
+  // credit to user @JimmyK4542, and whoever published the original intuition
+  // also add 1 to i and j to avoid issues where i == 0 || j == 0
+  // transform to uint64_t to avoid issues with overflow during multiplication
+  uint64_t ij = (i + 1) * (i + 2) / 2 + j + 1;
+  
+  // adapted from xorshift64, Marsaglia
+  // https://en.wikipedia.org/wiki/Xorshift
+  ij ^= ij << 13 | (i << 17);
+  ij ^= ij >> 7 | (j << 5);
+  ij ^= ij << 17;
+  
+  // adapted from xorshift128+
+  // https://xoshiro.di.unimi.it/xorshift128plus.c
+  uint64_t s = state ^ ij;
+  s ^= s << 23;
+  s = s ^ ij ^ (s >> 18) ^ (ij >> 5);
+  return (uint32_t)((s + ij));
+}
+
+// generate a random value in the uniform distribution [0, 1]
+inline double rand_unif(const uint32_t state, const uint32_t i, const uint32_t j){
+  double x = (double)rand_uint32(state, i, j) / UINT32_MAX;
+  return x - std::floor(x);
+}
+
+// generate a sparse matrix
+//[[Rcpp::export]]
+Eigen::SparseMatrix<double> rand_spmat(const uint32_t nrow, const uint32_t ncol, const uint32_t inv_density, const uint32_t seed){
+  Eigen::SparseMatrix<double> mat(nrow, ncol);
+  mat.reserve(Eigen::VectorXi::Constant(ncol, nrow / (inv_density - 1)));
+  for(uint32_t j = 0; j < ncol; ++j){
+    for (uint32_t i = 0; i < nrow; ++i) {
+      if(rand_uint32(seed, i, j) % inv_density == 0){
+        mat.insert(i, j) = rand_unif(seed, i, j);
+      }
+    }
+  }
+  mat.makeCompressed();
+  return mat;
+}
+
+// generate a dense matrix
+//[[Rcpp::export]]
+Eigen::MatrixXd rand_mat(const uint32_t nrow, const uint32_t ncol, const uint32_t seed){
+  Eigen::MatrixXd mat(nrow, ncol);
+  for(uint32_t j = 0; j < ncol; ++j){
+    for(uint32_t i = 0; i < nrow; ++i){
+      mat(i, j) = rand_unif(seed, i, j);
+    }
+  }
+  return mat;
+}
+
 // NMF HELPER FUNCTIONS
 // Pearson correlation between two matrices (used for determining convergence)
 inline double cor(Eigen::MatrixXd& x, Eigen::MatrixXd& y) {
@@ -114,4 +173,25 @@ Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const ui
     }
 
     return Rcpp::List::create(Rcpp::Named("w") = w, Rcpp::Named("d") = d, Rcpp::Named("h") = h);
+}
+
+// NMF FUNCTION
+//[[Rcpp::export]]
+std::vector<double> c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, size_t reps, const double tol, const uint16_t maxit, const bool verbose,
+                 const double L1, const int threads) {
+
+  std::vector<double> times;
+  
+  while(reps --> 0){
+    // use inv_density = 20 to generate a 95% sparse matrix
+    Eigen::SparseMatrix<double> A = rand_spmat(nrow, ncol, 20, seed);
+    Eigen::MatrixXd w = rand_mat(k, nrow, seed);
+    
+    // time this for n different seeds
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    c_nmf(A, tol, maxit, verbose, L1, threads, w);
+    std::chrono::steady_clock::time_point stop = std::chrono::steady_clock::now();
+    times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count());
+  }
+ return times;
 }
