@@ -17,6 +17,9 @@ c_nmf_rand <- function(seed, nrow, ncol, k, tol, maxit, verbose, L1, threads) {
     .Call(`_FastNMF_c_nmf_rand`, seed, nrow, ncol, k, tol, maxit, verbose, L1, threads)
 }
 
+#' Automatic benchmarking using random matrices
+#' 
+#' @export
 run_benchmarking <- function() {
     .Call(`_FastNMF_run_benchmarking`)
 }

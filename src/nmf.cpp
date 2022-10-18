@@ -191,6 +191,9 @@ size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol,
     return res;
 }
 
+//' Automatic benchmarking using random matrices
+//' 
+//' @export
 //[[Rcpp::export]]
 std::vector<size_t> run_benchmarking() {
     std::vector<uint32_t> seeds = {182274, 10483, 7852};
