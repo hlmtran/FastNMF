@@ -4,16 +4,7 @@
 \alias{FastNMF}
 \title{Run Fast NMF}
 \usage{
-FastNMF(
-  A,
-  k,
-  tol = 1e-04,
-  maxit = 100,
-  verbose = FALSE,
-  L1 = 0,
-  threads = 0,
-  mode = 1
-)
+FastNMF(A, k, tol = 1e-04, maxit = 100, verbose = FALSE, L1 = 0, threads = 0)
 }
 \arguments{
 \item{A}{sparse input matrix giving data to be factorized}

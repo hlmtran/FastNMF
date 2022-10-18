@@ -177,21 +177,39 @@ Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const ui
 
 // NMF FUNCTION
 //[[Rcpp::export]]
-std::vector<double> c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, size_t reps, const double tol, const uint16_t maxit, const bool verbose,
+size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, const double tol, const uint16_t maxit, const bool verbose,
                  const double L1, const int threads) {
 
-  std::vector<double> times;
+  // use inv_density = 20 to generate a 95% sparse matrix
+  Eigen::SparseMatrix<double> A = rand_spmat(nrow, ncol, 20, seed);
+  Eigen::MatrixXd w = rand_mat(k, nrow, seed);
   
-  while(reps --> 0){
-    // use inv_density = 20 to generate a 95% sparse matrix
-    Eigen::SparseMatrix<double> A = rand_spmat(nrow, ncol, 20, seed);
-    Eigen::MatrixXd w = rand_mat(k, nrow, seed);
-    
-    // time this for n different seeds
-    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    c_nmf(A, tol, maxit, verbose, L1, threads, w);
-    std::chrono::steady_clock::time_point stop = std::chrono::steady_clock::now();
-    times.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count());
+  // time this for n different seeds
+  std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+  c_nmf(A, tol, maxit, verbose, L1, threads, w);
+  std::chrono::steady_clock::time_point stop = std::chrono::steady_clock::now();
+  size_t res = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count();
+  return res;
+}
+
+//[[Rcpp::export]]
+std::vector<size_t> run_benchmarking(){
+
+  std::vector<uint32_t> seeds = {182274, 10483, 7852};
+  std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
+  std::vector<uint32_t> nrows = {1000, 10000};
+  std::vector<uint32_t> ncols = {1000, 10000};
+  std::vector<size_t> times;
+  for(auto seed : seeds){
+    for(auto rank : ranks){
+      for(auto nrow : nrows){
+        for(auto ncol : ncols){
+          Rprintf("seed: %8i; rank: %2i, rows: %8i, cols: %8i\n", seed, rank, nrow, ncol);
+          size_t time = c_nmf_rand(seed, nrow, ncol, rank, 1e-4, 100, false, 0, 0);
+          times.push_back(time);
+        }
+      }
+    }
   }
- return times;
+  return times;
 }
