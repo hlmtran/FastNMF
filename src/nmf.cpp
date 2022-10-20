@@ -220,10 +220,10 @@ std::vector<size_t> run_benchmarking() {
 //' @export
 //[[Rcpp::export]]
 std::vector<size_t> run_benchmarking2() {
-    std::vector<uint32_t> seeds = {182274, 10483, 7852};
-    std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
-    std::vector<uint32_t> nrows = {10000, 100000};
-    std::vector<uint32_t> ncols = {10000, 100000};
+    std::vector<uint32_t> seeds = {182274, 10483};
+    std::vector<uint32_t> ranks = {20, 30, 40, 50};
+    std::vector<uint32_t> nrows = {10000};
+    std::vector<uint32_t> ncols = {50000};
     std::vector<size_t> times;
     for (auto seed : seeds) {
         for (auto rank : ranks) {
