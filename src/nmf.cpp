@@ -214,3 +214,27 @@ std::vector<size_t> run_benchmarking() {
     }
     return times;
 }
+
+//' Automatic benchmarking using random matrices
+//' 
+//' @export
+//[[Rcpp::export]]
+std::vector<size_t> run_benchmarking2() {
+    std::vector<uint32_t> seeds = {182274, 10483, 7852};
+    std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
+    std::vector<uint32_t> nrows = {10000, 100000};
+    std::vector<uint32_t> ncols = {10000, 100000};
+    std::vector<size_t> times;
+    for (auto seed : seeds) {
+        for (auto rank : ranks) {
+            for (auto nrow : nrows) {
+                for (auto ncol : ncols) {
+                    Rprintf("seed: %8i; rank: %2i, rows: %8i, cols: %8i\n", seed, rank, nrow, ncol);
+                    size_t time = c_nmf_rand(seed, nrow, ncol, rank, 1e-4, 100, false, 0, 0);
+                    times.push_back(time);
+                }
+            }
+        }
+    }
+    return times;
+}
