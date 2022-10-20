@@ -129,10 +129,10 @@ inline void nnls(Eigen::MatrixXd& a, Eigen::VectorXd& b, Eigen::MatrixXd& h, con
 
 // NMF UPDATE FUNCTIONS
 // update h given A and w
-void predict(const Eigen::SparseMatrix<double>& A, const Eigen::MatrixXd& w, Eigen::MatrixXd& h, const double L1, const int threads) {
+void predict(const Eigen::SparseMatrix<double>& A, const Eigen::MatrixXd& w, Eigen::MatrixXd& h, const double L1) {
     Eigen::MatrixXd a = AAt(w);
 #ifdef _OPENMP
-#pragma omp parallel for num_threads(threads)
+#pragma omp parallel for
 #endif
     for (size_t i = 0; i < h.cols(); ++i) {
         Eigen::VectorXd b = Eigen::VectorXd::Zero(h.rows());
@@ -149,7 +149,7 @@ void predict(const Eigen::SparseMatrix<double>& A, const Eigen::MatrixXd& w, Eig
 // NMF FUNCTION
 //[[Rcpp::export]]
 Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const uint16_t maxit, const bool verbose,
-                 const double L1, const int threads, Eigen::MatrixXd w) {
+                 const double L1, Eigen::MatrixXd w) {
     const Eigen::SparseMatrix<double> At = A.transpose();
     if (verbose) Rprintf("\n%4s | %8s \n---------------\n", "iter", "tol");
     if (w.rows() == A.rows()) w = w.transpose();
@@ -161,9 +161,9 @@ Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const ui
         Eigen::MatrixXd w_it = w;
 
         // update h, scale h, update w, scale w
-        predict(A, w, h, L1, threads);
+        predict(A, w, h, L1);
         scale(h, d);
-        predict(At, h, w, L1, threads);
+        predict(At, h, w, L1);
         scale(w, d);
 
         // calculate tolerance of the model fit to detect convergence
@@ -177,15 +177,14 @@ Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const ui
 
 // NMF FUNCTION
 //[[Rcpp::export]]
-size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, const double tol, const uint16_t maxit, const bool verbose,
-                  const double L1, const int threads) {
+size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, const uint16_t maxit) {
     // use inv_density = 20 to generate a 95% sparse matrix
     Eigen::SparseMatrix<double> A = rand_spmat(nrow, ncol, 20, seed);
     Eigen::MatrixXd w = rand_mat(k, nrow, seed);
 
     // time this for n different seeds
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    c_nmf(A, tol, maxit, verbose, L1, threads, w);
+    c_nmf(A, 1e-20, maxit, false, 0, w);
     std::chrono::steady_clock::time_point stop = std::chrono::steady_clock::now();
     size_t res = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count();
     return res;
@@ -198,39 +197,16 @@ size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol,
 std::vector<size_t> run_benchmarking() {
     std::vector<uint32_t> seeds = {182274, 10483, 7852};
     std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
-    std::vector<uint32_t> nrows = {1000, 10000};
+    std::vector<uint32_t> nrows = {1000, 10000, 25000};
     std::vector<uint32_t> ncols = {1000, 10000};
     std::vector<size_t> times;
     for (auto seed : seeds) {
         for (auto rank : ranks) {
             for (auto nrow : nrows) {
                 for (auto ncol : ncols) {
+                  Rcpp::checkUserInterrupt();
                     Rprintf("seed: %8i; rank: %2i, rows: %8i, cols: %8i\n", seed, rank, nrow, ncol);
-                    size_t time = c_nmf_rand(seed, nrow, ncol, rank, 1e-4, 100, false, 0, 0);
-                    times.push_back(time);
-                }
-            }
-        }
-    }
-    return times;
-}
-
-//' Automatic benchmarking using random matrices
-//' 
-//' @export
-//[[Rcpp::export]]
-std::vector<size_t> run_benchmarking2() {
-    std::vector<uint32_t> seeds = {182274, 10483, 7852};
-    std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
-    std::vector<uint32_t> nrows = {10000, 100000};
-    std::vector<uint32_t> ncols = {10000, 100000};
-    std::vector<size_t> times;
-    for (auto seed : seeds) {
-        for (auto rank : ranks) {
-            for (auto nrow : nrows) {
-                for (auto ncol : ncols) {
-                    Rprintf("seed: %8i; rank: %2i, rows: %8i, cols: %8i\n", seed, rank, nrow, ncol);
-                    size_t time = c_nmf_rand(seed, nrow, ncol, rank, 1e-4, 100, false, 0, 0);
+                    size_t time = c_nmf_rand(seed, nrow, ncol, rank, 100);
                     times.push_back(time);
                 }
             }

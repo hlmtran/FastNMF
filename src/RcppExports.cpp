@@ -39,8 +39,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // c_nmf
-Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const uint16_t maxit, const bool verbose, const double L1, const int threads, Eigen::MatrixXd w);
-RcppExport SEXP _FastNMF_c_nmf(SEXP ASEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP verboseSEXP, SEXP L1SEXP, SEXP threadsSEXP, SEXP wSEXP) {
+Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const uint16_t maxit, const bool verbose, const double L1, Eigen::MatrixXd w);
+RcppExport SEXP _FastNMF_c_nmf(SEXP ASEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP verboseSEXP, SEXP L1SEXP, SEXP wSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -49,15 +49,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const uint16_t >::type maxit(maxitSEXP);
     Rcpp::traits::input_parameter< const bool >::type verbose(verboseSEXP);
     Rcpp::traits::input_parameter< const double >::type L1(L1SEXP);
-    Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
     Rcpp::traits::input_parameter< Eigen::MatrixXd >::type w(wSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_nmf(A, tol, maxit, verbose, L1, threads, w));
+    rcpp_result_gen = Rcpp::wrap(c_nmf(A, tol, maxit, verbose, L1, w));
     return rcpp_result_gen;
 END_RCPP
 }
 // c_nmf_rand
-size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, const double tol, const uint16_t maxit, const bool verbose, const double L1, const int threads);
-RcppExport SEXP _FastNMF_c_nmf_rand(SEXP seedSEXP, SEXP nrowSEXP, SEXP ncolSEXP, SEXP kSEXP, SEXP tolSEXP, SEXP maxitSEXP, SEXP verboseSEXP, SEXP L1SEXP, SEXP threadsSEXP) {
+size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol, const uint32_t k, const uint16_t maxit);
+RcppExport SEXP _FastNMF_c_nmf_rand(SEXP seedSEXP, SEXP nrowSEXP, SEXP ncolSEXP, SEXP kSEXP, SEXP maxitSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -65,12 +64,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const uint32_t >::type nrow(nrowSEXP);
     Rcpp::traits::input_parameter< const uint32_t >::type ncol(ncolSEXP);
     Rcpp::traits::input_parameter< const uint32_t >::type k(kSEXP);
-    Rcpp::traits::input_parameter< const double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< const uint16_t >::type maxit(maxitSEXP);
-    Rcpp::traits::input_parameter< const bool >::type verbose(verboseSEXP);
-    Rcpp::traits::input_parameter< const double >::type L1(L1SEXP);
-    Rcpp::traits::input_parameter< const int >::type threads(threadsSEXP);
-    rcpp_result_gen = Rcpp::wrap(c_nmf_rand(seed, nrow, ncol, k, tol, maxit, verbose, L1, threads));
+    rcpp_result_gen = Rcpp::wrap(c_nmf_rand(seed, nrow, ncol, k, maxit));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -84,24 +79,13 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// run_benchmarking2
-std::vector<size_t> run_benchmarking2();
-RcppExport SEXP _FastNMF_run_benchmarking2() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(run_benchmarking2());
-    return rcpp_result_gen;
-END_RCPP
-}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_FastNMF_rand_spmat", (DL_FUNC) &_FastNMF_rand_spmat, 4},
     {"_FastNMF_rand_mat", (DL_FUNC) &_FastNMF_rand_mat, 3},
-    {"_FastNMF_c_nmf", (DL_FUNC) &_FastNMF_c_nmf, 7},
-    {"_FastNMF_c_nmf_rand", (DL_FUNC) &_FastNMF_c_nmf_rand, 9},
+    {"_FastNMF_c_nmf", (DL_FUNC) &_FastNMF_c_nmf, 6},
+    {"_FastNMF_c_nmf_rand", (DL_FUNC) &_FastNMF_c_nmf_rand, 5},
     {"_FastNMF_run_benchmarking", (DL_FUNC) &_FastNMF_run_benchmarking, 0},
-    {"_FastNMF_run_benchmarking2", (DL_FUNC) &_FastNMF_run_benchmarking2, 0},
     {NULL, NULL, 0}
 };
 
