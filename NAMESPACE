@@ -2,6 +2,7 @@
 
 export(FastNMF)
 export(run_benchmarking)
+export(run_benchmarking2)
 import(Matrix)
 import(RcppML)
 import(ggplot2)

@@ -84,6 +84,16 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// run_benchmarking2
+std::vector<size_t> run_benchmarking2();
+RcppExport SEXP _FastNMF_run_benchmarking2() {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    rcpp_result_gen = Rcpp::wrap(run_benchmarking2());
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_FastNMF_rand_spmat", (DL_FUNC) &_FastNMF_rand_spmat, 4},
@@ -91,6 +101,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_FastNMF_c_nmf", (DL_FUNC) &_FastNMF_c_nmf, 7},
     {"_FastNMF_c_nmf_rand", (DL_FUNC) &_FastNMF_c_nmf_rand, 9},
     {"_FastNMF_run_benchmarking", (DL_FUNC) &_FastNMF_run_benchmarking, 0},
+    {"_FastNMF_run_benchmarking2", (DL_FUNC) &_FastNMF_run_benchmarking2, 0},
     {NULL, NULL, 0}
 };
 

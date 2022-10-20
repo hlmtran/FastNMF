@@ -24,3 +24,10 @@ run_benchmarking <- function() {
     .Call(`_FastNMF_run_benchmarking`)
 }
 
+#' Automatic benchmarking using random matrices
+#' 
+#' @export
+run_benchmarking2 <- function() {
+    .Call(`_FastNMF_run_benchmarking2`)
+}
+
