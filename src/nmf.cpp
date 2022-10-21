@@ -197,8 +197,8 @@ size_t c_nmf_rand(const uint32_t seed, const uint32_t nrow, const uint32_t ncol,
 std::vector<size_t> run_benchmarking() {
     std::vector<uint32_t> seeds = {182274, 10483, 7852};
     std::vector<uint32_t> ranks = {5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
-    std::vector<uint32_t> nrows = {1000, 10000, 25000};
-    std::vector<uint32_t> ncols = {1000, 10000};
+    std::vector<uint32_t> nrows = {1000, 10000, 25000, 50000, 100000, 200000};
+    std::vector<uint32_t> ncols = {1000, 10000, 25000, 50000, 100000};
     std::vector<size_t> times;
     for (auto seed : seeds) {
         for (auto rank : ranks) {
