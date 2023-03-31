@@ -9,7 +9,12 @@
 #include <omp.h>
 #endif
 
+#include <algorithm>
 #include <chrono>
+#include <iostream>
+#include <iterator>
+#include <random>
+#include <vector>
 
 // generate a random uint32 given indices i and j and some state
 inline uint32_t rand_uint32(const uint32_t state, const uint32_t i, const uint32_t j) {
@@ -105,7 +110,6 @@ void scale(Eigen::MatrixXd& w, Eigen::VectorXd& d) {
 };
 
 // NNLS SOLVER FOR SYSTEMS IN THE FORM OF ax=b
-// optimized and modified from github.com/linxihui/NNLM "c_nnls" function
 inline void nnls(Eigen::MatrixXd& a, Eigen::VectorXd& b, Eigen::MatrixXd& h, const size_t sample, const double L2) {
     double tol = 1;
     for (uint8_t it = 0; it < 100 && (tol / b.size()) > 1e-8; ++it) {
@@ -179,6 +183,191 @@ void predict_gd(const Eigen::SparseMatrix<double>& A,
         atw.row(i) = (atw.row(i).array() < 0).select(0, atw.row(i));
         h.row(i) += atw.row(i);
     }
+}
+
+// NMF FUNCTION
+// tied weights
+// A is m x n
+// w is k x m
+//[[Rcpp::export]]
+Rcpp::List autoencoder_nmf(const Eigen::SparseMatrix<double>& A,
+                           Eigen::MatrixXd& w,
+                           double learning_rate = 0.001,
+                           size_t maxit = 100,
+                           double tol = 1e-5,
+                           bool verbose = true) {
+    if (verbose) Rprintf("\n%4s | %8s | %8s\n-------------------------\n", "iter", "mae", "tol");
+    size_t m = A.rows();
+    size_t n = A.cols();
+    size_t k = w.rows();
+
+    Eigen::VectorXd err = Eigen::VectorXd::Zero(maxit);
+    size_t iter = 0;
+    double curr_tol = 1;
+    for (; iter < maxit && curr_tol > tol; ++iter) {
+        for (size_t i = 0; i < n; ++i) {
+            // FEED-FORWARD
+            // encoder
+            Eigen::VectorXd a1 = Eigen::VectorXd::Zero(k);
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                a1 += it.value() * w.col(it.row());
+
+            // a1 = (a1.array() < 0).select(0, a1);  // relu activation
+            // if "A" is non-negative, there is no possibility for a1 to be negative
+
+            // decoder
+            Eigen::VectorXd a2(m);
+            for (size_t j = 0; j < m; ++j)
+                a2(j) = (w.col(j).array() * a1.array()).sum();
+
+            // a2 = (a2.array() < 0).select(0, a2);  // relu activation
+
+            // calculate error
+            Eigen::VectorXd error = -a2;
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                error(it.row()) += it.value();
+
+            err(iter) += error.array().abs().sum() / m;  // mean absolute error
+
+            // BACKPROPAGATE
+            Eigen::ArrayXd a1_prime = (a1.array() > 0).select(1, a1);  // derivative of relu
+            Eigen::ArrayXd a2_prime = (a2.array() > 0).select(1, a2);  // derivative of relu
+            Eigen::ArrayXd a2_delta = error.array() * a2_prime;        // length m
+            Eigen::ArrayXd a1_delta = Eigen::VectorXd::Zero(k);
+            for (size_t j = 0; j < m; ++j)
+                a1_delta += w.col(j).array() * a2_delta(j);
+            a1_delta *= a1_prime;
+
+            // update weights
+            a1_delta *= learning_rate;
+            a2_delta *= learning_rate;
+
+            // update weights with encoder error
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                for (size_t p = 0; p < k; ++p)
+                    w(p, it.row()) += a1_delta(p) * it.value();
+
+            // update weights with decoder error
+            for (size_t p = 0; p < k; ++p)
+                for (size_t q = 0; q < m; ++q)
+                    w(p, q) += a1(p) * a2_delta(q);
+
+            // apply non-negativity constraints
+            w = (w.array() < 0).select(0, w);
+        }
+        err(iter) /= n;
+        if (iter > 0) curr_tol = std::abs(err(iter) - err(iter - 1)) / (err(iter) + err(iter - 1));
+        if (verbose) Rprintf("%4d | %8f | %8f\n", iter + 1, err(iter), curr_tol);
+        Rcpp::checkUserInterrupt();
+    }
+    Eigen::MatrixXd h = w * A;
+    w = w.transpose();
+    Eigen::VectorXd d = Eigen::VectorXd::Zero(k);
+    for (size_t j = 0; j < k; ++j) {
+        double h_diag = h.row(j).array().sum();
+        double w_diag = w.col(j).array().sum();
+        d(j) = h_diag + w_diag;
+        h.row(j).array() /= h_diag;
+        w.col(j).array() /= w_diag;
+    }
+    err.conservativeResize(iter);
+    return Rcpp::List::create(Rcpp::Named("w") = w, Rcpp::Named("d") = d, Rcpp::Named("h") = h, Rcpp::Named("error") = err);
+}
+
+// untied weights
+// A is m x n
+// w1 and w2 are k x m
+//[[Rcpp::export]]
+Rcpp::List autoencoder2_nmf(const Eigen::SparseMatrix<double>& A,
+                            Eigen::MatrixXd& w1,
+                            Eigen::MatrixXd& w2,
+                            double learning_rate = 0.001,
+                            size_t maxit = 100,
+                            double tol = 1e-5,
+                            bool verbose = true) {
+    if (verbose) Rprintf("\n%4s | %8s | %8s\n-------------------------\n", "iter", "mae", "tol");
+    size_t m = A.rows();
+    size_t n = A.cols();
+    size_t k = w1.rows();
+
+    Eigen::VectorXd err = Eigen::VectorXd::Zero(maxit);
+    size_t iter = 0;
+    double curr_tol = 1;
+    for (; iter < maxit && curr_tol > tol; ++iter) {
+        for (size_t i = 0; i < n; ++i) {
+            // FEED-FORWARD
+            // encoder
+            Eigen::VectorXd a1 = Eigen::VectorXd::Zero(k);
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                a1 += it.value() * w1.col(it.row());
+
+            // a1 = (a1.array() < 0).select(0, a1);  // relu activation
+            // if "A" is non-negative, there is no possibility for a1 to be negative
+
+            // decoder
+            Eigen::VectorXd a2(m);
+            for (size_t j = 0; j < m; ++j)
+                a2(j) = (w2.col(j).array() * a1.array()).sum();
+
+            // a2 = (a2.array() < 0).select(0, a2);  // relu activation
+
+            // calculate error
+            Eigen::VectorXd error = -a2;
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                error(it.row()) += it.value();
+
+            err(iter) += error.array().abs().sum() / m;  // mean absolute error
+
+            // BACKPROPAGATE
+            Eigen::ArrayXd a1_prime = (a1.array() > 0).select(1, a1);  // derivative of relu
+            Eigen::ArrayXd a2_prime = (a2.array() > 0).select(1, a2);  // derivative of relu
+            Eigen::ArrayXd a2_delta = error.array() * a2_prime;        // length m
+            Eigen::ArrayXd a1_delta = Eigen::VectorXd::Zero(k);
+            for (size_t j = 0; j < m; ++j)
+                a1_delta += w2.col(j).array() * a2_delta(j);
+            a1_delta *= a1_prime;
+
+            // update weights
+            a1_delta *= learning_rate;
+            a2_delta *= learning_rate;
+
+            // update weights with encoder error
+            for (Eigen::SparseMatrix<double>::InnerIterator it(A, i); it; ++it)
+                for (size_t p = 0; p < k; ++p)
+                    w1(p, it.row()) += a1_delta(p) * it.value();
+
+            // update weights with decoder error
+            for (size_t p = 0; p < k; ++p)
+                for (size_t q = 0; q < m; ++q)
+                    w2(p, q) += a1(p) * a2_delta(q);
+
+            // apply non-negativity constraints
+            w1 = (w1.array() < 0).select(0, w1);
+            w2 = (w2.array() < 0).select(0, w2);
+        }
+        err(iter) /= n;
+        if (iter > 0) curr_tol = std::abs(err(iter) - err(iter - 1)) / (err(iter) + err(iter - 1));
+        if (verbose) Rprintf("%4d | %8f | %8f\n", iter + 1, err(iter), curr_tol);
+        Rcpp::checkUserInterrupt();
+    }
+    Eigen::MatrixXd h1 = w2 * A;
+    Eigen::MatrixXd h2 = w1 * A;
+    w1 = w1.transpose();
+    w2 = w2.transpose();
+    Eigen::VectorXd d = Eigen::VectorXd::Zero(k);
+    for (size_t j = 0; j < k; ++j) {
+        double h1_diag = h1.row(j).array().sum();
+        double w1_diag = w1.col(j).array().sum();
+        d(j) = h1_diag + w1_diag;
+        h1.row(j).array() /= h1_diag;
+        w1.col(j).array() /= w1_diag;
+        double h2_diag = h2.row(j).array().sum();
+        double w2_diag = w2.col(j).array().sum();
+        h2.row(j).array() /= h2_diag;
+        w2.col(j).array() /= w2_diag;
+    }
+    err.conservativeResize(iter);
+    return Rcpp::List::create(Rcpp::Named("w1") = w1, Rcpp::Named("d") = d, Rcpp::Named("h1") = h1, Rcpp::Named("w2") = w2, Rcpp::Named("h2") = h2, Rcpp::Named("error") = err);
 }
 
 // NMF FUNCTION
