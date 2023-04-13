@@ -1,9 +1,8 @@
 #define EIGEN_NO_DEBUG
 #define EIGEN_INITIALIZE_MATRICES_BY_ZERO
-#define ROOT 0
+
 //[[Rcpp::depends(RcppEigen)]]
 #include <RcppEigen.h>
-#include <mpi.h>
 
 //[[Rcpp::plugins(openmp)]]
 #ifdef _OPENMP
@@ -86,7 +85,7 @@ inline double cor(Eigen::MatrixXd& x, Eigen::MatrixXd& y) {
     return 1 - (n * sum_xy - sum_x * sum_y) / std::sqrt((n * sum_x2 - sum_x * sum_x) * (n * sum_y2 - sum_y * sum_y));
 }
 
-// fast symmetric matrix multiplication, A * A.transpose()  
+// fast symmetric matrix multiplication, A * A.transpose()
 // see https://stackoverflow.com/questions/72100483/matrix-multiplication-of-an-eigen-matrix-for-a-subset-of-columns
 Eigen::MatrixXd AAt(const Eigen::MatrixXd& A) {
     Eigen::MatrixXd AAt = Eigen::MatrixXd::Zero(A.rows(), A.rows());
@@ -128,11 +127,31 @@ inline void nnls(Eigen::MatrixXd& a, Eigen::VectorXd& b, Eigen::MatrixXd& h, con
     }
 }
 
+inline void nnls2(Eigen::MatrixXd& a, Eigen::MatrixXd& b, Eigen::MatrixXd& h, const size_t sample) {
+  double tol = 1;
+  for (uint8_t it = 0; it < 100 && (tol / b.rows()) > 1e-8; ++it) {
+    tol = 0;
+    for (size_t i = 0; i < h.rows(); ++i) {
+      double diff = b(i, sample) / a(i, i);
+      if (-diff > h(i, sample)) {
+        if (h(i, sample) != 0) {
+          b.col(sample) -= a.col(i) * -h(i, sample);
+          tol = 1;
+          h(i, sample) = 0;
+        }
+      } else if (diff != 0) {
+        h(i, sample) += diff;
+        b.col(sample) -= a.col(i) * diff;
+        tol += std::abs(diff / (h(i, sample) + 1e-15));
+      }
+    }
+  }
+}
+
 // NMF UPDATE FUNCTIONS
 // update h given A and w
 void predict(const Eigen::SparseMatrix<double>& A, const Eigen::MatrixXd& w, Eigen::MatrixXd& h, const double L1) {
-    Eigen::MatrixXd a = AAt(w); //hth // separate function that is passed into thisi function 
-
+    Eigen::MatrixXd a = AAt(w);
 #ifdef _OPENMP
 #pragma omp parallel for
 #endif
@@ -148,68 +167,122 @@ void predict(const Eigen::SparseMatrix<double>& A, const Eigen::MatrixXd& w, Eig
     }
 }
 
+void predict_w(std::vector<Eigen::SparseMatrix<double>>& A, const std::vector<Eigen::MatrixXd>& h, Eigen::MatrixXd& w, const double L1) {
+  size_t k = h[0].rows();
+  size_t m = A[0].cols();
+
+  
+  Eigen::MatrixXd a = Eigen::MatrixXd::Zero(k, k);
+  
+  // this loop needs to be distributed across all nodes, then reduce partial a's into single master node
+  for(size_t i = 0; i < h.size(); ++i){
+    a += AAt(h[i]);
+  }
+  
+  // this will involve distributed tcrossprod(h) followed by reduction
+  // Step 2: Calculate b
+  // get all of b as a matrix of the same dimensions of w
+  Eigen::MatrixXd b = Eigen::MatrixXd::Zero(k,m);
+  
+  //this for loop needs to be distributed across all nodes, then reduce partial b's into single master node
+  for(size_t c = 0; c < h.size(); ++c){
+  #pragma omp parallel for
+    for (size_t i = 0; i < w.cols(); ++i) {
+      for (Eigen::SparseMatrix<double>::InnerIterator it(A[c], i); it; ++it)
+        b.col(i) += it.value() * h[c].col(it.row());
+      
+    }
+  }
+  b.array() -= L1;
+
+  // Step 3: Solve ax=b
+  // solve each system in an embarassingly parallel manner
+  #pragma omp parallel for
+  for(size_t i = 0; i < w.cols(); ++i){
+    nnls2(a, b, w, i);
+  }
+  
+}
+
 // NMF FUNCTION
 //[[Rcpp::export]]
 Rcpp::List c_nmf(const Eigen::SparseMatrix<double> A, const double tol, const uint16_t maxit, const bool verbose,
                  const double L1, Eigen::MatrixXd w) {
-    const Eigen::SparseMatrix<double> At = A.transpose(); //At calculation ???? can I do this on each node rather than scattering it?
+    //const Eigen::SparseMatrix<double> At = A.transpose();
     if (verbose) Rprintf("\n%4s | %8s \n---------------\n", "iter", "tol");
-    if (w.rows() == A.rows()) w = w.transpose(); 
+    if (w.rows() == A.rows()) w = w.transpose();
     if (w.cols() != A.rows()) Rcpp::stop("dimensions of A and w are incompatible");
-    
-    //start MPI
-    MPI_init(&argc, &argv);
-
-    int numNodes, nodeID;
-    MPI_Comm_size(MPI_COMM_WORLD,&numNodes);
-    MPI_Comm_rank(MPI_COMM_WORLD,&nodeID);
-    
-    
-    //what is matrixXd?
-    //broadcast w; is .size() appropriate or do i need w.rows * w.cols?
-    MPI_Bcast(w,w.rows() * w.cols(),MPI_DOUBLE,ROOT,MPI_COMM_WORLD);
-    //broadcast tol_
-    MPI_Bcast(tol,1,MPI_DOUBLE,ROOT,MPI_COMM_WORLD);
-    //broadcast maxit
-    //broadcast verbose
-    //scatterv A
-    /*
-
-    */
-    //scatterv At
-
-    //size of rank * how many columns
-    //initialize on each node
-    double tol_ = 1;
-    Eigen::MatrixXd h(w.rows(), l_A.cols());
+    Eigen::MatrixXd h(w.rows(), A.cols());
     Eigen::VectorXd d(w.rows());
-    //initialize w Eigen::matrixXd randMat(,)
+    double tol_ = 1;
+    
+    std::cout << "h[" << w.rows() << "X" << A.cols() <<"]" << std::endl; 
+    size_t chunks = 3;
+    size_t chunk_size = ceil(double(A.cols())/double(chunks));
+    
+    //initialize vectors of matrices A and H
+    std::vector<Eigen::SparseMatrix<double>> v_A;
+    std::vector<Eigen::MatrixXd> v_H;
+    
+    //divide matrix A and H
+    for(size_t i = 0; i < chunks-1; ++i){
+      v_A.push_back(A.middleCols(i*chunk_size,chunk_size));
+      v_H.push_back(h.middleCols(i*chunk_size,chunk_size));
+    }
+    //handling leftover chunks
+    v_A.push_back(A.middleCols((chunks-1)*chunk_size,A.cols()-chunk_size*(chunks-1)));
+    v_H.push_back(h.middleCols((chunks-1)*chunk_size,A.cols()-chunk_size*(chunks-1)));
+    
+    //create At from A
+    std::vector<Eigen::SparseMatrix<double>> v_At = v_A;
+    for (size_t i = 0; i< chunks;i++){
+      v_At[i] = v_At[i].transpose();
+    }
+    
+    
     for (size_t iter_ = 0; iter_ < maxit && tol_ > tol; ++iter_) {
         Eigen::MatrixXd w_it = w;
-        Eigen::MatrixXd l_w = w;
+        //update all h
+        for(size_t i = 0; i < chunks; i++){
+          predict(v_A[i], w, v_H[i], L1);
+        }
+        //calculate rowsums
+        d.setZero();
+        for(size_t i = 0; i < chunks; i++){
+          d.array() += v_H[i].rowwise().sum().array();
+        }
+        d.array()+= 1e-15; //avoid divide by 0
         
+        //scale h on all chunks
+        for(size_t i = 0; i < chunks; ++i){
+          for(size_t j = 0; j < v_H[i].cols(); ++j)
+            v_H[i].col(j).array() /= d.array();
+        }
         
-        // update h, scale h, update w, scale w
-        predict(l_A, l_w, l_h, L1);
-        scale(l_h, d);
-        predict(l_At, l_h, l_w, L1);
-
-        //MPI_barrier
-        MPI_Barrier(MPI_COMM_WORLD)
-        //MPI_reduce sum for w
-        MPI_Allreduce(&l_w,&w,,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD)
+        //update w, scale w  
+        predict_w(v_At, v_H, w, L1);
         scale(w, d);
-
+        
         // calculate tolerance of the model fit to detect convergence
         tol_ = cor(w, w_it);  // correlation between "w" across consecutive iterations
         if (verbose) Rprintf("%4d | %8.2e\n", iter_ + 1, tol_);
-        
-        
         Rcpp::checkUserInterrupt();
     }
-        //gather H //write as sparse if necessary
-
-    MPI_Finalize();
+    // combine to global h
+    
+    //for(size_t i = 0; i< chunks -1; ++i){
+    //  h.middleCols(i*chunk_size,chunk_size) = v_H[i-1];
+    //}
+    //h.middleCols((chunks-1)*chunk_size,A.cols()-chunk_size*(chunks-1)) = v_H[chunks-1];
+    
+    h = v_H[0];
+    std::cout << chunks << std::endl;
+    for (size_t c = 1; c < chunks; ++c){
+      Eigen::MatrixXd temp(h.rows(),h.cols() + v_H[c].cols());
+      temp << h, v_H[c];
+      h = temp;
+    }
+    
     return Rcpp::List::create(Rcpp::Named("w") = w, Rcpp::Named("d") = d, Rcpp::Named("h") = h);
 }
 
